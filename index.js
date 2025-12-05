@@ -30,6 +30,20 @@ const connectDB = async () => {
 // Connect to Database
 connectDB();
 
+// Course docuMent
+// {
+//   title: String (required)
+//   image: String (required) - URL
+//   price: Number (required)
+//   duration: String (required) - e.g. "4 weeks"
+//   category: String (required) - e.g. "Web Development"
+//   description: String (required)
+//   isFeatured: Boolean (default: false)
+//   instructorName: String (required)
+//   instructorEmail: String (required)
+//   instructorPhoto: String (required) - URL
+// }
+
 app.use(cors());
 app.use(express.json());
 
