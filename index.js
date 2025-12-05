@@ -55,6 +55,67 @@ app.get('/', (req, res) => {
     });
 });
 
+// crEate new course
+app.post('/courses', async (req, res) => {
+    try {
+        const courseData = req.body;
+
+        // basic validaton
+        if (!courseData.title || !courseData.price || !courseData.category) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required fields'
+            });
+        }
+
+        // set default for isFeatured if not providd
+        if (courseData.isFeatured === undefined) {
+            courseData.isFeatured = false;
+        }
+
+        const result = await coursesCollection.insertOne(courseData);
+
+        res.status(201).json({
+            success: true,
+            message: 'Course created successfully',
+            courseId: result.insertedId
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error creating course',
+            error: error.message
+        });
+    }
+});
+
+// Get all courses with optinal category filter
+app.get('/courses', async (req, res) => {
+    try {
+        const { category } = req.query;
+
+        // build query object
+        const query = {};
+        if (category) {
+            query.category = category;
+        }
+
+        const courses = await coursesCollection.find(query).toArray();
+
+        res.status(200).json({
+            success: true,
+            count: courses.length,
+            data: courses
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching courses',
+            error: error.message
+        });
+    }
+});
+
 app.listen(PORT, () => {
     console.log('Server Status: Running');
     console.log(`Port: ${PORT}`);
