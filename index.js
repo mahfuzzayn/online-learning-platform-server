@@ -44,6 +44,13 @@ connectDB();
 //   instructorPhoto: String (required) - URL
 // }
 
+// Enrollment documeNt
+// {
+//   userEmail: String (required)
+//   courseId: String (required) - ObjectId as string
+//   enrolledAt: Date (auto-generated)
+// }
+
 app.use(cors());
 app.use(express.json());
 
