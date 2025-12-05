@@ -232,6 +232,117 @@ app.delete('/courses/:id', async (req, res) => {
     }
 });
 
+// Enroll user in a course
+app.post('/enrollments', async (req, res) => {
+    try {
+        const { userEmail, courseId } = req.body;
+        const { ObjectId } = require('mongodb');
+
+        // validte required fields
+        if (!userEmail || !courseId) {
+            return res.status(400).json({
+                success: false,
+                message: 'userEmail and courseId are required'
+            });
+        }
+
+        // validate courseid format
+        if (!ObjectId.isValid(courseId)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid course ID format'
+            });
+        }
+
+        // check if course exists
+        const course = await coursesCollection.findOne({ _id: new ObjectId(courseId) });
+        if (!course) {
+            return res.status(404).json({
+                success: false,
+                message: 'Course not found'
+            });
+        }
+
+        // check if already enrolld
+        const existingEnrollment = await enrollmentsCollection.findOne({
+            userEmail: userEmail,
+            courseId: courseId
+        });
+
+        if (existingEnrollment) {
+            return res.status(400).json({
+                success: false,
+                message: 'User already enrolled in this course'
+            });
+        }
+
+        // create enrollment
+        const enrollmentData = {
+            userEmail: userEmail,
+            courseId: courseId,
+            enrolledAt: new Date()
+        };
+
+        const result = await enrollmentsCollection.insertOne(enrollmentData);
+
+        res.status(201).json({
+            success: true,
+            message: 'Enrollment successful',
+            enrollmentId: result.insertedId
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error creating enrollment',
+            error: error.message
+        });
+    }
+});
+
+// Get enrolled courses by user email
+app.get('/enrollments', async (req, res) => {
+    try {
+        const { userEmail } = req.query;
+        const { ObjectId } = require('mongodb');
+
+        if (!userEmail) {
+            return res.status(400).json({
+                success: false,
+                message: 'userEmail query parameter is required'
+            });
+        }
+
+        // get enrollments for user
+        const enrollments = await enrollmentsCollection.find({ userEmail: userEmail }).toArray();
+
+        // populate course data for each enrollment
+        const enrolledCourses = [];
+        for (const enrollment of enrollments) {
+            const course = await coursesCollection.findOne({ _id: new ObjectId(enrollment.courseId) });
+            if (course) {
+                enrolledCourses.push({
+                    enrollmentId: enrollment._id,
+                    userEmail: enrollment.userEmail,
+                    enrolledAt: enrollment.enrolledAt,
+                    course: course
+                });
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            count: enrolledCourses.length,
+            data: enrolledCourses
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching enrollments',
+            error: error.message
+        });
+    }
+});
+
 app.listen(PORT, () => {
     console.log('Server Status: Running');
     console.log(`Port: ${PORT}`);
