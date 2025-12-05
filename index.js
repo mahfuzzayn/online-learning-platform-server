@@ -1,34 +1,33 @@
 const express = require('express');
 const cors = require('cors');
-const { MongoClient } = require('mongodb');
+const { MongoClient, ObjectId } = require('mongodb');
 require('dotenv').config();
 
-// Initialize Express App
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Database variables
-let db;
-let coursesCollection;
-let enrollmentsCollection;
+// Middleware
+app.use(cors());
+app.use(express.json());
 
-// Database Connection
-const connectDB = async () => {
-    try {
-        const client = new MongoClient(process.env.MONGO_URI);
-        await client.connect();
-        db = client.db('onlineLearningDB');
-        coursesCollection = db.collection('courses');
-        enrollmentsCollection = db.collection('enrollments');
-        console.log('MongoDB Connected Successfully');
-    } catch (error) {
-        console.error('MongoDB Connection Error:', error.message);
-        process.exit(1);
+// Database connection function
+let cachedClient = null;
+let cachedDb = null;
+
+async function connectDB() {
+    if (cachedDb) {
+        return cachedDb;
     }
-};
 
-// Connect to Database
-connectDB();
+    const client = new MongoClient(process.env.MONGO_URI);
+    await client.connect();
+    const db = client.db('onlineLearningDB');
+
+    cachedClient = client;
+    cachedDb = db;
+
+    return db;
+}
 
 // Course docuMent
 // {
@@ -51,9 +50,7 @@ connectDB();
 //   enrolledAt: Date (auto-generated)
 // }
 
-app.use(cors());
-app.use(express.json());
-
+// Root route
 app.get('/', (req, res) => {
     res.status(200).json({
         success: true,
@@ -62,24 +59,33 @@ app.get('/', (req, res) => {
     });
 });
 
-// health check endpoint
-app.get('/health', (req, res) => {
-    const healthStatus = {
-        status: 'OK',
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        database: db ? 'Connected' : 'Disconnected'
-    };
-
-    res.status(200).json(healthStatus);
+// Health check
+app.get('/health', async (req, res) => {
+    try {
+        const db = await connectDB();
+        res.status(200).json({
+            status: 'OK',
+            timestamp: new Date().toISOString(),
+            uptime: process.uptime(),
+            database: 'Connected'
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'ERROR',
+            database: 'Disconnected',
+            error: error.message
+        });
+    }
 });
 
-// crEate new course
+// Create new course
 app.post('/courses', async (req, res) => {
     try {
+        const db = await connectDB();
+        const coursesCollection = db.collection('courses');
         const courseData = req.body;
 
-        // basic validaton
+        // Basic validation
         if (!courseData.title || !courseData.price || !courseData.category) {
             return res.status(400).json({
                 success: false,
@@ -87,7 +93,7 @@ app.post('/courses', async (req, res) => {
             });
         }
 
-        // set default for isFeatured if not providd
+        // Set default for isFeatured
         if (courseData.isFeatured === undefined) {
             courseData.isFeatured = false;
         }
@@ -108,12 +114,13 @@ app.post('/courses', async (req, res) => {
     }
 });
 
-// Get all courses with optinal category filter
+// Get all courses with optional category filter
 app.get('/courses', async (req, res) => {
     try {
+        const db = await connectDB();
+        const coursesCollection = db.collection('courses');
         const { category } = req.query;
 
-        // build query object
         const query = {};
         if (category) {
             query.category = category;
@@ -135,13 +142,13 @@ app.get('/courses', async (req, res) => {
     }
 });
 
-// get single course by id
+// Get single course by id
 app.get('/courses/:id', async (req, res) => {
     try {
+        const db = await connectDB();
+        const coursesCollection = db.collection('courses');
         const { id } = req.params;
-        const { ObjectId } = require('mongodb');
 
-        // validate objectid format
         if (!ObjectId.isValid(id)) {
             return res.status(400).json({
                 success: false,
@@ -174,11 +181,11 @@ app.get('/courses/:id', async (req, res) => {
 // Update course by id
 app.put('/courses/:id', async (req, res) => {
     try {
+        const db = await connectDB();
+        const coursesCollection = db.collection('courses');
         const { id } = req.params;
         const updateData = req.body;
-        const { ObjectId } = require('mongodb');
 
-        // validate objectid
         if (!ObjectId.isValid(id)) {
             return res.status(400).json({
                 success: false,
@@ -186,7 +193,6 @@ app.put('/courses/:id', async (req, res) => {
             });
         }
 
-        // remove _id from update data if present
         delete updateData._id;
 
         const result = await coursesCollection.updateOne(
@@ -215,13 +221,13 @@ app.put('/courses/:id', async (req, res) => {
     }
 });
 
-// deLete course by id
+// Delete course by id
 app.delete('/courses/:id', async (req, res) => {
     try {
+        const db = await connectDB();
+        const coursesCollection = db.collection('courses');
         const { id } = req.params;
-        const { ObjectId } = require('mongodb');
 
-        // validate objectid format
         if (!ObjectId.isValid(id)) {
             return res.status(400).json({
                 success: false,
@@ -254,10 +260,11 @@ app.delete('/courses/:id', async (req, res) => {
 // Enroll user in a course
 app.post('/enrollments', async (req, res) => {
     try {
+        const db = await connectDB();
+        const coursesCollection = db.collection('courses');
+        const enrollmentsCollection = db.collection('enrollments');
         const { userEmail, courseId } = req.body;
-        const { ObjectId } = require('mongodb');
 
-        // validte required fields
         if (!userEmail || !courseId) {
             return res.status(400).json({
                 success: false,
@@ -265,7 +272,6 @@ app.post('/enrollments', async (req, res) => {
             });
         }
 
-        // validate courseid format
         if (!ObjectId.isValid(courseId)) {
             return res.status(400).json({
                 success: false,
@@ -273,7 +279,7 @@ app.post('/enrollments', async (req, res) => {
             });
         }
 
-        // check if course exists
+        // Check if course exists
         const course = await coursesCollection.findOne({ _id: new ObjectId(courseId) });
         if (!course) {
             return res.status(404).json({
@@ -282,7 +288,7 @@ app.post('/enrollments', async (req, res) => {
             });
         }
 
-        // check if already enrolld
+        // Check if already enrolled
         const existingEnrollment = await enrollmentsCollection.findOne({
             userEmail: userEmail,
             courseId: courseId
@@ -295,7 +301,7 @@ app.post('/enrollments', async (req, res) => {
             });
         }
 
-        // create enrollment
+        // Create enrollment
         const enrollmentData = {
             userEmail: userEmail,
             courseId: courseId,
@@ -321,8 +327,10 @@ app.post('/enrollments', async (req, res) => {
 // Get enrolled courses by user email
 app.get('/enrollments', async (req, res) => {
     try {
+        const db = await connectDB();
+        const coursesCollection = db.collection('courses');
+        const enrollmentsCollection = db.collection('enrollments');
         const { userEmail } = req.query;
-        const { ObjectId } = require('mongodb');
 
         if (!userEmail) {
             return res.status(400).json({
@@ -331,10 +339,9 @@ app.get('/enrollments', async (req, res) => {
             });
         }
 
-        // get enrollments for user
         const enrollments = await enrollmentsCollection.find({ userEmail: userEmail }).toArray();
 
-        // populate course data for each enrollment
+        // Populate course data
         const enrolledCourses = [];
         for (const enrollment of enrollments) {
             const course = await coursesCollection.findOne({ _id: new ObjectId(enrollment.courseId) });
@@ -362,7 +369,7 @@ app.get('/enrollments', async (req, res) => {
     }
 });
 
-// 404 handler for undefined routes
+// 404 handler
 app.use((req, res) => {
     res.status(404).json({
         success: false,
@@ -371,9 +378,13 @@ app.use((req, res) => {
     });
 });
 
-app.listen(PORT, () => {
-    console.log('Server Status: Running');
-    console.log(`Port: ${PORT}`);
-    console.log(`URL: http://localhost:${PORT}`);
-    console.log(`Database: ${db ? 'Connected' : 'Connecting...'}`);
-});
+// Start server only when running locally
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log('Server Status: Running');
+        console.log(`Port: ${PORT}`);
+        console.log(`URL: http://localhost:${PORT}`);
+    });
+}
+
+module.exports = app;
