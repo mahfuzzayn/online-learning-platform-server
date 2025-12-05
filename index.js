@@ -116,6 +116,86 @@ app.get('/courses', async (req, res) => {
     }
 });
 
+// get single course by id
+app.get('/courses/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { ObjectId } = require('mongodb');
+
+        // validate objectid format
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid course ID format'
+            });
+        }
+
+        const course = await coursesCollection.findOne({ _id: new ObjectId(id) });
+
+        if (!course) {
+            return res.status(404).json({
+                success: false,
+                message: 'Course not found'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: course
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching course',
+            error: error.message
+        });
+    }
+});
+
+// Update course by id
+app.put('/courses/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const updateData = req.body;
+        const { ObjectId } = require('mongodb');
+
+        // validate objectid
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid course ID format'
+            });
+        }
+
+        // remove _id from update data if present
+        delete updateData._id;
+
+        const result = await coursesCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: updateData }
+        );
+
+        if (result.matchedCount === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Course not found'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Course updated successfully',
+            modifiedCount: result.modifiedCount
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error updating course',
+            error: error.message
+        });
+    }
+});
+
 app.listen(PORT, () => {
     console.log('Server Status: Running');
     console.log(`Port: ${PORT}`);
