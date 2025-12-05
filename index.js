@@ -55,6 +55,18 @@ app.get('/', (req, res) => {
     });
 });
 
+// health check endpoint
+app.get('/health', (req, res) => {
+    const healthStatus = {
+        status: 'OK',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        database: db ? 'Connected' : 'Disconnected'
+    };
+
+    res.status(200).json(healthStatus);
+});
+
 // crEate new course
 app.post('/courses', async (req, res) => {
     try {
@@ -343,8 +355,18 @@ app.get('/enrollments', async (req, res) => {
     }
 });
 
+// 404 handler for undefined routes
+app.use((req, res) => {
+    res.status(404).json({
+        success: false,
+        message: 'Route not found',
+        path: req.originalUrl
+    });
+});
+
 app.listen(PORT, () => {
     console.log('Server Status: Running');
     console.log(`Port: ${PORT}`);
     console.log(`URL: http://localhost:${PORT}`);
+    console.log(`Database: ${db ? 'Connected' : 'Connecting...'}`);
 });
